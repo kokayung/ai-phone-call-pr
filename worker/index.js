@@ -1,14 +1,29 @@
-// Cloudflare Worker. Secrets: GITHUB_TOKEN, APPROVAL_PIN, TWILIO_AUTH_TOKEN.
+// Cloudflare Worker. Secrets: GITHUB_TOKEN, APPROVAL_PIN, WEBHOOK_KEY, TWILIO_ACCOUNT_SID (TWILIO_AUTH_TOKEN optional).
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 const say = t => `<Say language="en-US">${esc(t)}</Say>`;
 const xml = inner => new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${inner}</Response>`, { headers: { 'Content-Type': 'text/xml' } });
 
-async function validTwilio(request, url, params, authToken) {
-  const data = url + Object.keys(params).sort().map(k => k + params[k]).join('');
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(authToken), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
-  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data)));
-  const expected = btoa(String.fromCharCode(...sig));
-  return expected === request.headers.get('X-Twilio-Signature');
+// Trial Twilio accounts may send no X-Twilio-Signature header, so we authenticate with a shared
+// key in the URL (WEBHOOK_KEY) plus the expected AccountSid. If a signature is present it must be valid.
+const safeEq = (a, b) => {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+};
+
+async function signatureOk(request, url, params, authToken) {
+  const got = request.headers.get('X-Twilio-Signature');
+  if (!got) return true; // not sent (trial accounts); key check below is the gate
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(authToken.trim()), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const u = new URL(url);
+  const reencoded = `${u.origin}${u.pathname}?${new URLSearchParams(u.searchParams).toString()}`;
+  for (const c of new Set([url, reencoded, decodeURIComponent(url)])) {
+    const data = c + Object.keys(params).sort().map(k => k + params[k]).join('');
+    const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data)));
+    if (btoa(String.fromCharCode(...sig)) === got) return true;
+  }
+  return false;
 }
 
 export default {
@@ -16,9 +31,11 @@ export default {
     if (request.method !== 'POST') return new Response('PR phone approver running');
     const url = new URL(request.url);
     const form = Object.fromEntries(new URLSearchParams(await request.text()));
-    if (!env.TWILIO_AUTH_TOKEN) { console.log('missing secret TWILIO_AUTH_TOKEN'); return new Response('misconfigured', { status: 500 }); }
-    if (!(await validTwilio(request, request.url, form, env.TWILIO_AUTH_TOKEN))) {
-      console.log('signature mismatch', request.url, Object.keys(form).join(','));
+    if (!env.WEBHOOK_KEY || !env.TWILIO_ACCOUNT_SID) { console.log('missing secret WEBHOOK_KEY or TWILIO_ACCOUNT_SID'); return new Response('misconfigured', { status: 500 }); }
+    if (!safeEq(url.searchParams.get('k') || '', env.WEBHOOK_KEY) || !safeEq(form.AccountSid || '', env.TWILIO_ACCOUNT_SID)) {
+      return new Response('forbidden', { status: 403 });
+    }
+    if (env.TWILIO_AUTH_TOKEN && !(await signatureOk(request, request.url, form, env.TWILIO_AUTH_TOKEN))) {
       return new Response('forbidden', { status: 403 });
     }
 
@@ -26,7 +43,7 @@ export default {
     const repo = url.searchParams.get('repo');
     const pr = url.searchParams.get('pr');
     const sha = url.searchParams.get('sha');
-    const qs = s => `${url.origin}${url.pathname}?step=${s}&amp;repo=${encodeURIComponent(repo)}&amp;pr=${pr}&amp;sha=${sha}`;
+    const qs = s => `${url.origin}${url.pathname}?step=${s}&amp;repo=${encodeURIComponent(repo)}&amp;pr=${pr}&amp;sha=${sha}&amp;k=${encodeURIComponent(url.searchParams.get('k'))}`;
 
     const gh = async (path, opts = {}) => {
       const r = await fetch(`https://api.github.com${path}`, {

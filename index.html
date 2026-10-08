@@ -7,5 +7,20 @@
 </head>
 <body>
     <h1>Hello World</h1>
+    <form action="/" method="post">
+        <input type="text" name="name" placeholder="Name">
+        <input type="text" name="email" placeholder="Email">
+        <input type="text" name="phone" placeholder="Phone">
+        <input type="submit" value="Submit">
+    </form>
+    <script>
+        const form = document.querySelector('form');
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = form.name.value;
+            const email = form.email.value;
+            const phone = form.phone.value;
+        });
+    </script>
 </body>
 </html>

@@ -16,7 +16,11 @@ export default {
     if (request.method !== 'POST') return new Response('PR phone approver running');
     const url = new URL(request.url);
     const form = Object.fromEntries(new URLSearchParams(await request.text()));
-    if (!(await validTwilio(request, request.url, form, env.TWILIO_AUTH_TOKEN))) return new Response('forbidden', { status: 403 });
+    if (!env.TWILIO_AUTH_TOKEN) { console.log('missing secret TWILIO_AUTH_TOKEN'); return new Response('misconfigured', { status: 500 }); }
+    if (!(await validTwilio(request, request.url, form, env.TWILIO_AUTH_TOKEN))) {
+      console.log('signature mismatch', request.url, Object.keys(form).join(','));
+      return new Response('forbidden', { status: 403 });
+    }
 
     const step = url.searchParams.get('step') || 'voice';
     const repo = url.searchParams.get('repo');

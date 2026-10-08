@@ -1,0 +1,6 @@
+{
+  "name": "pr-phone-approver",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GitHub Actions calls your phone after CI passes; press a key to merge or deny."
+}

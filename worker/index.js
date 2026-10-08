@@ -4,11 +4,20 @@ const say = t => `<Say language="en-US">${esc(t)}</Say>`;
 const xml = inner => new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${inner}</Response>`, { headers: { 'Content-Type': 'text/xml' } });
 
 async function validTwilio(request, url, params, authToken) {
-  const data = url + Object.keys(params).sort().map(k => k + params[k]).join('');
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(authToken), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
-  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data)));
-  const expected = btoa(String.fromCharCode(...sig));
-  return expected === request.headers.get('X-Twilio-Signature');
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(authToken.trim()), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const sign = async u => {
+    const data = u + Object.keys(params).sort().map(k => k + params[k]).join('');
+    const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data)));
+    return btoa(String.fromCharCode(...sig));
+  };
+  // Twilio may sign the URL with the query string encoded differently than we receive it.
+  const u = new URL(url);
+  const reencoded = `${u.origin}${u.pathname}?${new URLSearchParams(u.searchParams).toString()}`;
+  const got = request.headers.get('X-Twilio-Signature');
+  for (const candidate of new Set([url, reencoded, decodeURIComponent(url)])) {
+    if ((await sign(candidate)) === got) return true;
+  }
+  return false;
 }
 
 export default {
@@ -18,7 +27,8 @@ export default {
     const form = Object.fromEntries(new URLSearchParams(await request.text()));
     if (!env.TWILIO_AUTH_TOKEN) { console.log('missing secret TWILIO_AUTH_TOKEN'); return new Response('misconfigured', { status: 500 }); }
     if (!(await validTwilio(request, request.url, form, env.TWILIO_AUTH_TOKEN))) {
-      console.log('signature mismatch', request.url, Object.keys(form).join(','));
+      const fp = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(env.TWILIO_AUTH_TOKEN)))].slice(0, 4).map(b => b.toString(16).padStart(2, '0')).join('');
+      console.log('signature mismatch; worker token fp=' + fp + ' len=' + env.TWILIO_AUTH_TOKEN.length, request.url);
       return new Response('forbidden', { status: 403 });
     }
 

@@ -36,5 +36,4 @@ jobs:
             -u "$TWILIO_ACCOUNT_SID:$TWILIO_AUTH_TOKEN" \
             --data-urlencode "To=$MY_PHONE" \
             --data-urlencode "From=$TWILIO_FROM" \
-            --data-urlencode "Url=$APPROVAL_URL?step=voice&repo=$REPO&pr=$PR&sha=$SHA" \
-            --data-urlencode "Method=POST"
+            --data-urlencode "Url=$APPROVAL_URL?step=voice&repo=$REPO&pr=$PR&sha=$SHA"

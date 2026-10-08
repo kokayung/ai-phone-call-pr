@@ -1,0 +1,40 @@
+name: CI
+on:
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run lint --if-present
+      - run: npm test --if-present
+      - run: npm run build --if-present
+
+  phone-approval:
+    needs: ci
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call my phone
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+          MY_PHONE: ${{ secrets.MY_PHONE }}
+          APPROVAL_URL: ${{ secrets.APPROVAL_URL }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          curl -sS --fail-with-body -X POST \
+            "https://api.twilio.com/2010-04-01/Accounts/$TWILIO_ACCOUNT_SID/Calls.json" \
+            -u "$TWILIO_ACCOUNT_SID:$TWILIO_AUTH_TOKEN" \
+            --data-urlencode "To=$MY_PHONE" \
+            --data-urlencode "From=$TWILIO_FROM" \
+            --data-urlencode "Url=$APPROVAL_URL?step=voice&repo=$REPO&pr=$PR&sha=$SHA" \
+            --data-urlencode "Method=POST"

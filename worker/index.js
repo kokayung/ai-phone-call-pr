@@ -1,6 +1,6 @@
 // Cloudflare Worker. Secrets: GITHUB_TOKEN, APPROVAL_PIN, TWILIO_AUTH_TOKEN.
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
-const say = t => `<Say voice="Polly.Joanna">${esc(t)}</Say>`;
+const say = t => `<Say language="en-US">${esc(t)}</Say>`;
 const xml = inner => new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${inner}</Response>`, { headers: { 'Content-Type': 'text/xml' } });
 
 async function validTwilio(request, url, params, authToken) {
@@ -40,9 +40,10 @@ export default {
       const { data: p } = await gh(`/repos/${repo}/pulls/${pr}`);
       return xml(
         `<Gather numDigits="1" action="${qs('decision')}" timeout="8">` +
-        say(`Pull request ${pr} in ${repo.split('/')[1]} is ready. All checks passed. From ${p.user?.login}. ${p.title}. ` +
-          `${p.changed_files} files changed, ${p.additions} additions, ${p.deletions} deletions. ` +
-          `Press 1 to merge. Press 2 to deny and close. Press 3 to hear this again.`) +
+        say(`Hello Nay. Pull request number ${pr} in repository ${repo.replace('/', ' slash ')} is ready. All checks passed. ` +
+          `Author ${p.user?.login || 'unknown'}. Title: ${p.title || 'no title'}. ` +
+          `${p.changed_files ?? 0} files changed, ${p.additions ?? 0} additions, ${p.deletions ?? 0} deletions. ` +
+          `Press 1 to approve and merge. Press 2 to reject and close. Press 3 to hear this again.`) +
         `</Gather>` + say('No input received. Goodbye.'));
     }
 

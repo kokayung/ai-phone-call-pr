@@ -27,6 +27,7 @@ jobs:
           TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
           MY_PHONE: ${{ secrets.MY_PHONE }}
           APPROVAL_URL: ${{ secrets.APPROVAL_URL }}
+          WEBHOOK_KEY: ${{ secrets.WEBHOOK_KEY }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
@@ -36,4 +37,4 @@ jobs:
             -u "$TWILIO_ACCOUNT_SID:$TWILIO_AUTH_TOKEN" \
             --data-urlencode "To=$MY_PHONE" \
             --data-urlencode "From=$TWILIO_FROM" \
-            --data-urlencode "Url=$APPROVAL_URL?step=voice&repo=$REPO&pr=$PR&sha=$SHA"
+            --data-urlencode "Url=$APPROVAL_URL?step=voice&repo=$REPO&pr=$PR&sha=$SHA&k=$WEBHOOK_KEY"
